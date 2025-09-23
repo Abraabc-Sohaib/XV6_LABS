@@ -1,0 +1,28 @@
+#!/bin/sh
+
+# Remove old test files
+rm -f b c
+rm -rf a
+
+# Create directories and files
+mkdir a
+mkdir a/aa
+echo > b
+echo > a/b
+echo > a/aa/b
+echo > c
+
+# Test 1: echo command on each 'b'
+echo "=== Test 1: echo command on each 'b' ==="
+exec . b echo hi
+
+# Test 2: wc command on each 'b'
+echo "=== Test 2: wc command on each 'b' ==="
+exec . b wc
+
+# Test 3: ls command on each 'b'
+echo "=== Test 3: ls -l command on each 'b' ==="
+exec . b ls -l
+
+echo "=== DONE ==="
+
