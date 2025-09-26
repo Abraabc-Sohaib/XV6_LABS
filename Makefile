@@ -200,6 +200,7 @@ UPROGS=\
 	$U/_memdump\
 	$U/_find\
 	$U/_exec\
+	$U/_uptime\
 
 ifeq ($(LAB),syscall)
 UPROGS += \

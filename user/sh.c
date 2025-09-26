@@ -1,8 +1,44 @@
 // Shell.
 
 #include "kernel/types.h"
-#include "user/user.h"
+#include "kernel/stat.h"
 #include "kernel/fcntl.h"
+#include "user/user.h"
+#include "kernel/fs.h"
+
+
+#define HISTORY_SIZE 10
+
+char history[HISTORY_SIZE][100]; // last 10 commands, max length 100
+int history_count = 0;           // number of stored commands
+
+int strncmp(const char *s1, const char *s2, int n);
+char *strncpy(char *s, const char *t, int n);
+/*int strncmp(const char *s1, const char *s2, int n) {
+    for(int i = 0; i < n; i++) {
+        if(s1[i] != s2[i] || s1[i] == '\0' || s2[i] == '\0')
+            return (unsigned char)s1[i] - (unsigned char)s2[i];
+    }
+    return 0;
+}*/
+
+// basic string functions for xv6 user programs
+
+int strncmp(const char *p, const char *q, int n) {
+    for(int i = 0; i < n; i++){
+        if(p[i] != q[i] || p[i] == 0 || q[i] == 0)
+            return (uchar)p[i] - (uchar)q[i];
+    }
+    return 0;
+}
+
+char *strncpy(char *dst, const char *src, int n) {
+    for(int i = 0; i < n; i++){
+        dst[i] = src[i];
+        if(src[i] == 0) break;
+    }
+    return dst;
+}
 
 // Parsed command representation
 #define EXEC  1
@@ -130,52 +166,237 @@ runcmd(struct cmd *cmd)
   }
   exit(0);
 }
+// Tab completion helper
+void complete_tab(char *buf) {
+    int fd;
+    struct dirent de;
+    int len = strlen(buf);
 
-int
-getcmd(char *buf, int nbuf)
-{
-  write(2, "$ ", 2);
-  memset(buf, 0, nbuf);
-  gets(buf, nbuf);
-  if(buf[0] == 0) // EOF
-    return -1;
-  return 0;
+    fd = open(".", 0);   // open current directory
+    if(fd < 0){
+        return;
+    }
+
+    while(read(fd, &de, sizeof(de)) == sizeof(de)){
+        if(de.inum == 0)
+            continue;
+
+        // check if the start of name matches buf
+        if(strncmp(de.name, buf, len) == 0){
+            // copy the full name into buf
+            strncpy(buf, de.name, DIRSIZ);
+            buf[DIRSIZ] = 0;  // null terminate
+            break; // stop at first match
+        }
+    }
+    close(fd);
+}
+
+// Read input from user with support for tab completion
+/*int getcmd(char *buf, int nbuf) {
+    int i = 0;
+    char c;
+
+    // print prompt
+    write(2, "$ ", 2);
+
+    while(i + 1 < nbuf && read(0, &c, 1) == 1){
+        if(c == '\n'){ // Enter
+            buf[i] = 0;
+            write(1, "\n", 1);
+            return i;
+        } else if(c == 0x7f || c == '\b'){ // Backspace
+            if(i > 0){
+                i--;
+                write(1, "\b \b", 3); // erase from screen
+            }
+        } else if(c == '\t'){ // Tab -> autocomplete
+            complete_tab(buf);
+            // redraw buffer after autocomplete
+            write(2, "\r$ ", 3);
+            write(2, buf, strlen(buf));
+            i = strlen(buf); // update position
+        } else {
+            buf[i++] = c;
+            write(1, &c, 1); // echo char
+        }
+    }
+
+    buf[i] = 0;
+    if(i == 0) return -1; // EOF
+    return i;
+}
+*/
+int getcmd(char *buf, int nbuf) {
+    int i = 0;
+    char c;
+
+    // print prompt
+    write(2, "$ ", 2);
+    memset(buf, 0, nbuf);
+
+    while (i + 1 < nbuf && read(0, &c, 1) == 1) {
+        if (c == '\n' || c == '\r') { // Enter key
+            buf[i] = 0;
+            write(1, "\n", 1);
+
+            // Save command in history if non-empty
+            if (i > 0) {
+                strncpy(history[history_count % HISTORY_SIZE], buf, 100);
+                history[history_count % HISTORY_SIZE][99] = 0;
+                history_count++;
+            }
+
+            return i;
+        } else if (c == 0x7f || c == '\b') { // Backspace
+            if (i > 0) {
+                i--;
+                buf[i] = 0;
+                write(1, "\b \b", 3); // erase char from screen
+            }
+        } else if (c == '\t') { // Tab -> autocomplete
+            complete_tab(buf);
+            // redraw buffer after autocomplete
+            write(2, "\r$ ", 3);
+            write(2, buf, strlen(buf));
+            i = strlen(buf); // update current position
+        } else {
+            buf[i++] = c;
+            write(2, &c, 1); // echo char
+        }
+    }
+
+    buf[i] = 0;
+    if (i == 0) return -1; // EOF
+    return i;
 }
 
 int
 main(void)
 {
-  static char buf[100];
-  int fd;
+    static char buf[100];
+    int fd;
+    int interactive = 0; // assume non-interactive
 
-  // Ensure that three file descriptors are open.
-  while((fd = open("console", O_RDWR)) >= 0){
-    if(fd >= 3){
-      close(fd);
-      break;
+    // Check if stdin is console
+    int fd_test = open("console", O_RDWR);
+    if(fd_test >= 0){
+        close(fd_test);
+        interactive = 1;
     }
-  }
 
-  // Read and run input commands.
-  while(getcmd(buf, sizeof(buf)) >= 0){
-    char *cmd = buf;
-    while (*cmd == ' ' || *cmd == '\t')
-      cmd++;
-    if (*cmd == '\n') // is a blank command
-      continue;
-    if(cmd[0] == 'c' && cmd[1] == 'd' && cmd[2] == ' '){
-      // Chdir must be called by the parent, not the child.
-      cmd[strlen(cmd)-1] = 0;  // chop \n
-      if(chdir(cmd+3) < 0)
-        fprintf(2, "cannot cd %s\n", cmd+3);
-    } else {
-      if(fork1() == 0)
-        runcmd(parsecmd(cmd));
-      wait(0);
+    // Ensure three file descriptors are open
+    while ((fd = open("console", O_RDWR)) >= 0) {
+        if (fd >= 3) {
+            close(fd);
+            break;
+        }
     }
-  }
-  exit(0);
+
+    // Read and run commands
+    while(getcmd(buf, sizeof(buf)) >= 0){
+        char *cmd = buf;
+        while(*cmd == ' ' || *cmd == '\t')
+            cmd++;
+
+        if(*cmd == '\n' || *cmd == 0) // blank command
+            continue;
+
+        // Save command to history
+        strncpy(history[history_count % HISTORY_SIZE], cmd, 100);
+        history[history_count % HISTORY_SIZE][99] = 0;
+        history_count++;
+
+        // handle 'cd' command
+        if(cmd[0]=='c' && cmd[1]=='d' && cmd[2]==' '){
+            cmd[strlen(cmd)-1] = 0; // remove newline
+            if(chdir(cmd+3) < 0)
+                fprintf(2, "cannot cd %s\n", cmd+3);
+        }
+        // handle 'wait' command
+        else if(strncmp(cmd, "wait", 4) == 0 && (cmd[4]=='\n' || cmd[4]==0)){
+            wait(0);
+        }
+        // handle 'history' command
+        else if(strncmp(cmd, "history", 7) == 0 && (cmd[7]=='\n' || cmd[7]==0)){
+            int start = history_count > HISTORY_SIZE ? history_count - HISTORY_SIZE : 0;
+            for(int i=start; i<history_count; i++){
+                printf("%d: %s\n", i+1, history[i % HISTORY_SIZE]);
+            }
+        }
+        // handle other commands
+        else{
+            if(fork1() == 0){
+                runcmd(parsecmd(cmd));
+            }
+            wait(0); // parent waits for child
+        }
+
+        if(interactive)
+            printf("$ ");  // print prompt for interactive mode
+    }
+
+    exit(0);
 }
+
+
+/* BEFORE HISTORY IMPLEMENTED
+int
+main(void)
+{
+    static char buf[100];
+    int fd;
+    int interactive = 0; // assume non-interactive
+
+    // Check if stdin is console
+    int fd_test = open("console", O_RDWR);
+    if(fd_test >= 0){
+        close(fd_test);
+        interactive = 1;
+    }
+
+    // Ensure three file descriptors are open
+    while ((fd = open("console", O_RDWR)) >= 0) {
+        if (fd >= 3) {
+            close(fd);
+            break;
+        }
+    }
+
+    // Read and run commands
+    while(getcmd(buf, sizeof(buf)) >= 0){
+        if(interactive)
+            printf("$ ");  // prompt only for interactive mode
+
+        char *cmd = buf;
+        while(*cmd == ' ' || *cmd == '\t')
+            cmd++;
+
+        if(*cmd == '\n') // blank command
+            continue;
+
+        // handle 'cd' command
+        if(cmd[0]=='c' && cmd[1]=='d' && cmd[2]==' '){
+            cmd[strlen(cmd)-1] = 0; // remove newline
+            if(chdir(cmd+3) < 0)
+                fprintf(2, "cannot cd %s\n", cmd+3);
+        }
+        // handle 'wait' command
+        else if(strncmp(cmd, "wait", 4) == 0 && (cmd[4]=='\n' || cmd[4]==0)){
+            wait(0);
+        }
+        // handle other commands
+        else{
+            if(fork1() == 0){
+                runcmd(parsecmd(cmd));
+            }
+            wait(0); // parent waits for child
+        }
+    }
+
+    exit(0);
+}
+*/
 
 void
 panic(char *s)
