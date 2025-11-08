@@ -1,0 +1,12 @@
+LAB2
+Question 1: 
+1) usertrap called syscall
+2) value of p->trapframe->a7 is 0xf which is the "sys_open" system call.It represents the syscall number the process asked for.
+3) What was the previous mode that the CPU was in?
+ANS	User mode
+4) Write down the assembly instruction the kernel is panicing at. Which register corresponds to the variable num?
+ANS	The kernel panics at lw a3,0(zero) (a load from address 0). The register that corresponds to the variable num is a3.
+5) Why does the kernel crash?
+ANS	The kernel crashes because it tries to dereference address 0x0, which is not mapped in the kernel address space and the scause=0xd confirms this is a load page fault.
+6) What is the name of the process that was running when the kernel panicked? What is its PID?
+ANS	process:init, PID:1
