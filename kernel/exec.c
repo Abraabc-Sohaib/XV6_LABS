@@ -171,3 +171,4 @@ loadseg(pagetable_t pagetable, uint64 va, struct inode *ip, uint offset, uint sz
   
   return 0;
 }
+//Modify exec() to check if the call is masked, and if so, check if the argument pathname matches myproc()->allowed_path.
