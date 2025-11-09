@@ -9,6 +9,7 @@
 #include "riscv.h"
 #endif
 #include "vm.h"
+// CHANGES: Adjusted sys_sbrk() logic to call uvmalloc with size/alignment checks for superpages.
 
 uint64
 sys_exit(void)

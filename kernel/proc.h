@@ -2,7 +2,7 @@
 struct context {
   uint64 ra;
   uint64 sp;
-
+//CHANGES: // Added field to struct proc to store physical address of the shared usyscall page.
   // callee-saved
   uint64 s0;
   uint64 s1;
@@ -84,6 +84,7 @@ enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 // Per-process state
 struct proc {
   struct spinlock lock;
+  struct usyscall *usyscall;
 
   // p->lock must be held when using these:
   enum procstate state;        // Process state
