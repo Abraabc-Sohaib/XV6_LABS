@@ -196,8 +196,8 @@ UPROGS=\
 	$U/_logstress\
 	$U/_forphan\
 	$U/_dorphan\
-
-
+	$U/_ping\
+	$U/_pingpong\
 
 ifeq ($(LAB),util)
 UPROGS += \

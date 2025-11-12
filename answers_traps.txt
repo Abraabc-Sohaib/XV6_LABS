@@ -1,0 +1,18 @@
+Q1: Registers a0-a7 contain arguments to functions.
+Register a2 holds the value 13 in main's call to printf.
+
+Q2:f(8) is called in main function at compile time.
+Then g(8) is called which returns 8+3=11 (x+3).
+
+Q3:0x73e. The jal instruction "jal 73e <printf>" jumps to the target address 73e
+Here, the printf function code located.
+
+Q4:0x3c. Since the jal instruction is at address 0x38, the next instruction is at 0x38 + 4 = 0x3c.
+This address is saved in ra so that when printf returns, it knows where to continue execution in main.
+
+Q5:Output is He110 World
+
+Q6:i = 0x726c6400.
+57616 does not need to be modified.
+
+Q7:After y=, register a2's garbage/undefined value will br printed..
