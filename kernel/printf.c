@@ -3,7 +3,6 @@
 //
 
 #include <stdarg.h>
-
 #include "types.h"
 #include "param.h"
 #include "spinlock.h"
@@ -17,6 +16,21 @@
 
 volatile int panicking = 0; // printing a panic message
 volatile int panicked = 0; // spinning forever at end of a panic
+
+void 
+backtrace(void)
+{
+  uint64 fp = r_fp();
+  uint64 ra;
+
+  printf("backtrace:\n");
+  uint64 initial_fp = fp;
+  while (PGROUNDDOWN(fp) == PGROUNDDOWN(initial_fp)) {
+    ra = *((uint64 *)(fp - 8));
+    printf("%p\n", (void *) ra);
+    fp = *((uint64 *)(fp - 16));
+  }
+}
 
 // lock to avoid interleaving concurrent printf's.
 static struct {
