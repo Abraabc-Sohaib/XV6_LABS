@@ -195,9 +195,12 @@ UPROGS=\
 	$U/_logstress\
 	$U/_forphan\
 	$U/_dorphan\
-
-
-
+	$U/_pingpong\
+	$U/_testproc\
+	$U/_cpubound\
+	$U/_iobound\
+	$U/_simpletest\
+	$U/_mlfqtest\
 
 ifeq ($(LAB),syscall)
 UPROGS += \
@@ -302,7 +305,7 @@ QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
 	then echo "-gdb tcp::$(GDBPORT)"; \
 	else echo "-s -p $(GDBPORT)"; fi)
 ifndef CPUS
-CPUS := 3
+CPUS := 1
 endif
 ifeq ($(LAB),fs)
 CPUS := 1

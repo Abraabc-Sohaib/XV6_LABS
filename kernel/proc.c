@@ -125,6 +125,11 @@ found:
   p->pid = allocpid();
   p->state = USED;
 
+  // MLFQ initialization
+  p->priority = 0;           // Start at highest priority
+  p->time_slices = 0;        // No time used yet
+  p->queue_entry_time = 0;
+
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
     freeproc(p);
@@ -426,38 +431,38 @@ scheduler(void)
 
   c->proc = 0;
   for(;;){
-    // The most recent process to run may have had interrupts
-    // turned off; enable them to avoid a deadlock if all
-    // processes are waiting. Then turn them back off
-    // to avoid a possible race between an interrupt
-    // and wfi.
     intr_on();
-    intr_off();
 
-    int found = 0;
-    for(p = proc; p < &proc[NPROC]; p++) {
-      acquire(&p->lock);
-      if(p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
+    // MLFQ: Check each priority level from highest to lowest
+    for(int priority = 0; priority < 4; priority++) {
+      int found = 0;
 
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
-        found = 1;
+      for(p = proc; p < &proc[NPROC]; p++) {
+        acquire(&p->lock);
+
+        if(p->state == RUNNABLE && p->priority == priority) {
+          // Found a runnable process at this priority
+          p->state = RUNNING;
+          c->proc = p;
+          swtch(&c->context, &p->context);
+
+          // Process done running
+          c->proc = 0;
+          found = 1;
+        }
+        release(&p->lock);
+
+        if(found)
+          break;  // Move to next priority level
       }
-      release(&p->lock);
-    }
-    if(found == 0) {
-      // nothing to run; stop running on this core until an interrupt.
-      asm volatile("wfi");
+
+      if(found)
+        break;  // Start over from highest priority
     }
   }
 }
+
+
 
 // Switch to scheduler.  Must hold only p->lock
 // and have changed proc->state. Saves and restores
@@ -550,6 +555,12 @@ sleep(void *chan, struct spinlock *lk)
 
   acquire(&p->lock);  //DOC: sleeplock1
   release(lk);
+
+    // MLFQ: Boost priority on I/O (going to sleep)
+  if(p->priority > 0) {
+    p->priority--;  // Move to higher priority queue
+  }
+  p->time_slices = 0;  // Reset time quantum
 
   // Go to sleep.
   p->chan = chan;
